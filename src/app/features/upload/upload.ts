@@ -9,16 +9,21 @@ import { MatIconModule } from '@angular/material/icon';
   template: `
     <div
       class="dropzone"
+      role="button"
+      tabindex="0"
+      aria-label="Choose a .jfr file, or drop one here"
       [class.active]="dragActive()"
+      (dragenter)="onDragEnter($event)"
       (dragover)="onDragOver($event)"
       (dragleave)="onDragLeave($event)"
       (drop)="onDrop($event)"
-      (click)="fileInput.click()"
+      (click)="openPicker()"
+      (keydown.enter)="openPicker()"
+      (keydown.space)="openPicker(); $event.preventDefault()"
     >
-      <mat-icon class="dropzone-icon">upload_file</mat-icon>
-      <p class="dropzone-title">Drop a .jfr file here</p>
-      <p class="dropzone-subtitle">or click to browse&mdash;parsing happens entirely in your browser, nothing is uploaded anywhere.</p>
-      <button mat-flat-button type="button" (click)="fileInput.click(); $event.stopPropagation()">Choose file</button>
+      <mat-icon class="dropzone-icon" aria-hidden="true">{{ dragActive() ? 'download' : 'upload_file' }}</mat-icon>
+      <p class="dropzone-title">{{ dragActive() ? 'Release to open' : 'Drop a .jfr file here' }}</p>
+      <button mat-flat-button type="button" tabindex="-1" (click)="openPicker(); $event.stopPropagation()">Choose file</button>
     </div>
     <input #fileInput type="file" accept=".jfr" hidden (change)="onFileInputChange($event)" />
   `,
@@ -29,35 +34,37 @@ import { MatIconModule } from '@angular/material/icon';
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 8px;
-        padding: 48px 24px;
-        border: 2px dashed var(--mat-sys-outline);
-        border-radius: 16px;
+        gap: 12px;
+        min-height: 280px;
+        padding: 32px 24px;
+        box-sizing: border-box;
+        background: var(--panel);
+        border: 1.5px dashed color-mix(in srgb, var(--muted) 45%, transparent);
+        border-radius: 14px;
         cursor: pointer;
         text-align: center;
         transition:
           border-color 0.15s ease,
           background-color 0.15s ease;
       }
+      .dropzone:hover {
+        border-color: var(--signal);
+      }
       .dropzone.active {
-        border-color: var(--mat-sys-primary);
-        background-color: var(--mat-sys-primary-container);
+        border-style: solid;
+        border-color: var(--signal);
+        background-color: var(--signal-wash);
       }
       .dropzone-icon {
-        font-size: 48px;
-        width: 48px;
-        height: 48px;
-        color: var(--mat-sys-primary);
+        font-size: 40px;
+        width: 40px;
+        height: 40px;
+        color: var(--signal);
       }
       .dropzone-title {
         font-size: 18px;
         font-weight: 500;
-        margin: 4px 0;
-      }
-      .dropzone-subtitle {
-        color: var(--mat-sys-on-surface-variant);
-        margin: 0 0 12px;
-        max-width: 420px;
+        margin: 0 0 4px;
       }
     `,
   ],
@@ -65,21 +72,34 @@ import { MatIconModule } from '@angular/material/icon';
 export class UploadComponent {
   fileSelected = output<File>();
   protected dragActive = signal(false);
+  /** dragenter/dragleave fire for every child element; count them to know when the pointer really leaves. */
+  private dragDepth = 0;
 
   @ViewChild('fileInput') fileInput!: ElementRef<HTMLInputElement>;
 
+  protected openPicker(): void {
+    this.fileInput.nativeElement.click();
+  }
+
+  onDragEnter(event: DragEvent): void {
+    event.preventDefault();
+    this.dragDepth++;
+    this.dragActive.set(true);
+  }
+
   onDragOver(event: DragEvent): void {
     event.preventDefault();
-    this.dragActive.set(true);
   }
 
   onDragLeave(event: DragEvent): void {
     event.preventDefault();
-    this.dragActive.set(false);
+    this.dragDepth = Math.max(0, this.dragDepth - 1);
+    if (this.dragDepth === 0) this.dragActive.set(false);
   }
 
   onDrop(event: DragEvent): void {
     event.preventDefault();
+    this.dragDepth = 0;
     this.dragActive.set(false);
     const file = event.dataTransfer?.files?.[0];
     if (file) this.fileSelected.emit(file);

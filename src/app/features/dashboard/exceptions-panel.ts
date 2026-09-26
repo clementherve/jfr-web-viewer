@@ -1,8 +1,9 @@
-import { Component, computed, input } from '@angular/core';
+import { Component, computed, inject, input } from '@angular/core';
 import { MatTableModule } from '@angular/material/table';
 import type { EChartsCoreOption } from 'echarts/core';
 import { NgxEchartsDirective } from 'ngx-echarts';
 import type { ExceptionEvent, ParsedRecording } from '../../core/jfr/models';
+import { ThemeService } from '../../shared/theme.service';
 
 const TABLE_ROW_LIMIT = 100;
 
@@ -12,58 +13,63 @@ const TABLE_ROW_LIMIT = 100;
   imports: [NgxEchartsDirective, MatTableModule],
   template: `
     @if (recording().exceptions.length === 0) {
-      <p class="empty">No exception throw events were recorded.</p>
+      <div class="empty-state">
+        <strong>No exceptions recorded</strong>
+        Exception events (jdk.JavaExceptionThrow) are off by default. Enable them in a custom JFR settings file to see throws here.
+      </div>
     } @else {
-      <p class="hint">{{ recording().exceptions.length }} exceptions thrown during this recording.</p>
-      <div echarts [options]="chartOptions()" class="chart"></div>
+      <dl class="readout">
+        <div>
+          <dt>Exceptions thrown</dt>
+          <dd>{{ recording().exceptions.length.toLocaleString() }}</dd>
+        </div>
+        <div>
+          <dt>Distinct classes</dt>
+          <dd>{{ classCounts().length.toLocaleString() }}</dd>
+        </div>
+        <div>
+          <dt>Per second</dt>
+          <dd>{{ perSecond() }}</dd>
+        </div>
+      </dl>
 
-      <h3>
-        Recent throws
-        @if (recording().exceptions.length > tableRows().length) {
-          <span class="hint">(showing first {{ tableRows().length }} of {{ recording().exceptions.length }})</span>
-        }
-      </h3>
-      <table mat-table [dataSource]="tableRows()" class="mat-elevation-z0">
-        <ng-container matColumnDef="time">
-          <th mat-header-cell *matHeaderCellDef>Time</th>
-          <td mat-cell *matCellDef="let row">{{ formatTime(row.timeMs) }}</td>
-        </ng-container>
-        <ng-container matColumnDef="class">
-          <th mat-header-cell *matHeaderCellDef>Exception class</th>
-          <td mat-cell *matCellDef="let row">{{ row.thrownClass }}</td>
-        </ng-container>
-        <ng-container matColumnDef="message">
-          <th mat-header-cell *matHeaderCellDef>Message</th>
-          <td mat-cell *matCellDef="let row">{{ row.message || '—' }}</td>
-        </ng-container>
-        <tr mat-header-row *matHeaderRowDef="columns"></tr>
-        <tr mat-row *matRowDef="let row; columns: columns"></tr>
-      </table>
+      <section class="panel-section">
+        <h3>Most thrown classes</h3>
+        <div echarts [options]="chartOptions()" [theme]="theme.chartTheme()" class="chart surface" [style.height.px]="barChartHeight()"></div>
+      </section>
+
+      <section class="panel-section">
+        <h3>
+          Throws
+          @if (recording().exceptions.length > tableRows().length) {
+            <span class="hint">First {{ tableRows().length }} of {{ recording().exceptions.length.toLocaleString() }}</span>
+          }
+        </h3>
+        <div class="surface data-table-wrap">
+          <table mat-table [dataSource]="tableRows()">
+            <ng-container matColumnDef="time">
+              <th mat-header-cell *matHeaderCellDef>At</th>
+              <td mat-cell *matCellDef="let row" class="num">{{ formatTime(row.timeMs) }}</td>
+            </ng-container>
+            <ng-container matColumnDef="class">
+              <th mat-header-cell *matHeaderCellDef>Class</th>
+              <td mat-cell *matCellDef="let row" class="code">{{ row.thrownClass }}</td>
+            </ng-container>
+            <ng-container matColumnDef="message">
+              <th mat-header-cell *matHeaderCellDef>Message</th>
+              <td mat-cell *matCellDef="let row" [class.hint]="!row.message">{{ row.message || 'No message' }}</td>
+            </ng-container>
+            <tr mat-header-row *matHeaderRowDef="columns"></tr>
+            <tr mat-row *matRowDef="let row; columns: columns"></tr>
+          </table>
+        </div>
+      </section>
     }
   `,
   styles: [
     `
-      .empty {
-        color: var(--mat-sys-on-surface-variant);
-        text-align: center;
-        padding: 24px 0;
-      }
-      .hint {
-        font-size: 12px;
-        color: var(--mat-sys-on-surface-variant);
-      }
-      .chart {
-        width: 100%;
-        height: 260px;
-      }
-      h3 {
-        margin: 24px 0 8px;
-        display: flex;
-        align-items: baseline;
-        gap: 8px;
-      }
-      table {
-        width: 100%;
+      td.code {
+        overflow-wrap: anywhere;
       }
     `,
   ],
@@ -71,23 +77,33 @@ const TABLE_ROW_LIMIT = 100;
 export class ExceptionsPanelComponent {
   recording = input.required<ParsedRecording>();
   protected readonly columns = ['time', 'class', 'message'];
+  protected readonly theme = inject(ThemeService);
 
-  protected tableRows = computed<ExceptionEvent[]>(() => this.recording().exceptions.slice(0, TABLE_ROW_LIMIT));
-
-  protected chartOptions = computed<EChartsCoreOption>(() => {
+  protected classCounts = computed(() => {
     const counts = new Map<string, number>();
     for (const e of this.recording().exceptions) {
       counts.set(e.thrownClass, (counts.get(e.thrownClass) ?? 0) + 1);
     }
-    const top = Array.from(counts.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10);
+    return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
+  });
+
+  protected perSecond = computed(() => {
+    const seconds = this.recording().metadata.durationMs / 1000;
+    return seconds > 0 ? (this.recording().exceptions.length / seconds).toFixed(1) : 'n/a';
+  });
+
+  protected barChartHeight = computed(() => Math.min(10, this.classCounts().length) * 32 + 40);
+
+  protected tableRows = computed<ExceptionEvent[]>(() => this.recording().exceptions.slice(0, TABLE_ROW_LIMIT));
+
+  protected chartOptions = computed<EChartsCoreOption>(() => {
+    const top = this.classCounts().slice(0, 10).reverse();
     return {
-      tooltip: { trigger: 'axis' },
-      grid: { left: 200, right: 40, top: 20, bottom: 20, containLabel: false },
-      xAxis: { type: 'value', name: 'Count' },
-      yAxis: { type: 'category', data: top.map(([name]) => name).reverse(), axisLabel: { width: 190, overflow: 'truncate' } },
-      series: [{ type: 'bar', data: top.map(([, count]) => count).reverse() }],
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+      grid: { left: 16, right: 48, top: 12, bottom: 24, containLabel: true },
+      xAxis: { type: 'value', minInterval: 1 },
+      yAxis: { type: 'category', data: top.map(([name]) => name), axisLabel: { width: 320, overflow: 'truncate' } },
+      series: [{ name: 'Throws', type: 'bar', barMaxWidth: 18, label: { show: true, position: 'right' }, data: top.map(([, count]) => count) }],
     };
   });
 

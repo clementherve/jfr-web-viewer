@@ -1,39 +1,240 @@
-// Include theming for Angular Material with `mat.theme()`.
-// This Sass mixin will define CSS variables that are used for styling Angular Material
-// components according to the Material 3 design spec.
-// Learn more about theming and how to use it for your application's
-// custom components at https://material.angular.dev/guide/theming
 @use '@angular/material' as mat;
+
+// Design tokens. Values use light-dark() so they follow `color-scheme`, which
+// ThemeService sets on <html> (light, dark, or "light dark" to follow the OS).
+:root {
+  --paper: light-dark(#f5f6f8, #10141a);
+  --panel: light-dark(#ffffff, #171c24);
+  --ink: light-dark(#161b24, #e7eaef);
+  --muted: light-dark(#5a6371, #97a0ae);
+  --rule: light-dark(#dce0e6, #29303b);
+  --hover: light-dark(#eceef2, #1f2530);
+  // International orange, the colour of flight recorders. Used sparingly.
+  --signal: light-dark(#d4440a, #ff6b2c);
+  --signal-ink: light-dark(#b0380a, #ff8a57);
+  --signal-wash: light-dark(#fdebe3, #33190f);
+  --on-signal: light-dark(#ffffff, #1a0a02);
+  --danger-wash: light-dark(#fbe7e7, #3a1a1c);
+  --danger-ink: light-dark(#9b1c1c, #ffb4b4);
+
+  --font-ui: 'Instrument Sans', system-ui, sans-serif;
+  --font-code: 'JetBrains Mono', ui-monospace, monospace;
+
+  --radius-s: 6px;
+  --radius-m: 10px;
+}
 
 html {
   height: 100%;
+  color-scheme: light dark;
   @include mat.theme(
     (
       color: (
-        primary: mat.$azure-palette,
+        primary: mat.$orange-palette,
         tertiary: mat.$blue-palette,
       ),
-      typography: Roboto,
-      density: 0,
+      typography: (
+        plain-family: var(--font-ui),
+        brand-family: var(--font-ui),
+      ),
+      density: -1,
+    )
+  );
+  @include mat.theme-overrides(
+    (
+      primary: var(--signal),
+      on-primary: var(--on-signal),
+      primary-container: var(--signal-wash),
+      on-primary-container: var(--signal-ink),
+      surface: var(--panel),
+      on-surface: var(--ink),
+      on-surface-variant: var(--muted),
+      outline: var(--rule),
+      outline-variant: var(--rule),
+      surface-container: var(--panel),
+      surface-container-low: var(--panel),
+      surface-container-high: var(--hover),
+      surface-container-highest: var(--hover),
     )
   );
 }
 
 body {
-  // Default the application to a light color theme. This can be changed to
-  // `dark` to enable the dark color theme, or to `light dark` to defer to the
-  // user's system settings.
-  color-scheme: light;
-
-  // Set a default background, font and text colors for the application using
-  // Angular Material's system-level CSS variables. Learn more about these
-  // variables at https://material.angular.dev/guide/system-variables
-  background-color: var(--mat-sys-surface);
-  color: var(--mat-sys-on-surface);
-  font: var(--mat-sys-body-medium);
-
-  // Reset the user agent margin.
   margin: 0;
-  height: 100%;
+  min-height: 100%;
+  background-color: var(--paper);
+  color: var(--ink);
+  font: 400 14px/1.5 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
 }
-/* You can add global styles to this file, and also import other style files */
+
+h1,
+h2,
+h3 {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+}
+
+.code {
+  font-family: var(--font-code);
+  font-size: 12px;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+// Shared panel vocabulary used by every dashboard section.
+.panel-section + .panel-section {
+  margin-top: 32px;
+}
+
+.panel-section > h3 {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin: 0 0 12px;
+  font-size: 15px;
+}
+
+.panel-section > h3 .hint {
+  margin: 0;
+}
+
+.hint {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.chart {
+  width: 100%;
+  height: 280px;
+}
+
+.surface {
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-m);
+}
+
+.chart.surface {
+  box-sizing: border-box;
+  padding: 8px 4px 0;
+}
+
+// Empty sections tell the user what would have produced data.
+.empty-state {
+  padding: 40px 24px;
+  border: 1px dashed var(--rule);
+  border-radius: var(--radius-m);
+  color: var(--muted);
+  max-width: 64ch;
+}
+
+.empty-state strong {
+  display: block;
+  color: var(--ink);
+  font-size: 15px;
+  margin-bottom: 4px;
+}
+
+// Readout: one strip of key numbers at the top of a panel.
+.readout {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0 0 28px;
+  padding: 0;
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-m);
+}
+
+.readout > div {
+  flex: 1 1 140px;
+  padding: 14px 18px;
+  border-left: 1px solid var(--rule);
+  margin-left: -1px;
+  min-width: 0;
+}
+
+.readout dt {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.readout dd {
+  margin: 2px 0 0;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+// Tables inside panels.
+.data-table-wrap {
+  overflow-x: auto;
+}
+
+table.mat-mdc-table {
+  width: 100%;
+  background: transparent;
+}
+
+.mat-mdc-header-cell {
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 13px;
+}
+
+.mat-mdc-cell {
+  font-size: 13px;
+}
+
+.mat-mdc-row:hover {
+  background: var(--hover);
+}
+
+.mat-mdc-cell.right,
+.mat-mdc-header-cell.right {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+// d3-flame-graph ships with Verdana and fixed light colours.
+.d3-flame-graph rect {
+  stroke: var(--panel);
+}
+
+.d3-flame-graph-label {
+  font-family: var(--font-code);
+  font-size: 11px;
+  color: #1a1206;
+}
+
+.d3-flame-graph-tip {
+  background-color: var(--ink);
+  color: var(--paper);
+  font-family: var(--font-code);
+  font-size: 12px;
+  border-radius: var(--radius-s);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

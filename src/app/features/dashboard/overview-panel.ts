@@ -1,134 +1,157 @@
-import { Component, computed, input } from '@angular/core';
+import { Component, computed, inject, input } from '@angular/core';
 import type { EChartsCoreOption } from 'echarts/core';
 import { NgxEchartsDirective } from 'ngx-echarts';
 import type { ParsedRecording } from '../../core/jfr/models';
-import { formatBytes, formatDuration, formatTimeAxisLabel } from '../../shared/formatters';
+import { formatBytes, formatDurationMsPrecise, formatTimeAxisLabel } from '../../shared/formatters';
+import { ThemeService } from '../../shared/theme.service';
+import { TIME_AXIS_ZOOM } from './chart-defaults';
+
+function percent(v: number): string {
+  return `${(v * 100).toFixed(1)}%`;
+}
 
 @Component({
   selector: 'app-overview-panel',
   standalone: true,
   imports: [NgxEchartsDirective],
   template: `
-    <div class="metadata-grid">
-      <div class="metadata-item">
-        <span class="label">JVM</span>
-        <span class="value">{{ recording().metadata.jvmName || 'Unknown' }}</span>
+    <dl class="readout">
+      <div>
+        <dt>Average JVM CPU</dt>
+        <dd>{{ summary().avgCpu }}</dd>
       </div>
-      <div class="metadata-item">
-        <span class="label">Version</span>
-        <span class="value">{{ recording().metadata.jvmVersion || 'Unknown' }}</span>
+      <div>
+        <dt>Peak JVM CPU</dt>
+        <dd>{{ summary().peakCpu }}</dd>
       </div>
-      <div class="metadata-item">
-        <span class="label">PID</span>
-        <span class="value">{{ recording().metadata.pid || 'Unknown' }}</span>
+      <div>
+        <dt>Peak heap used</dt>
+        <dd>{{ summary().peakHeap }}</dd>
       </div>
-      <div class="metadata-item">
-        <span class="label">OS</span>
-        <span class="value">{{ recording().metadata.osVersion || 'Unknown' }}</span>
+      <div>
+        <dt>Time paused for GC</dt>
+        <dd>{{ summary().gcPause }}</dd>
       </div>
-      <div class="metadata-item">
-        <span class="label">Recording duration</span>
-        <span class="value">{{ formatDuration(recording().metadata.durationMs) }}</span>
-      </div>
-      <div class="metadata-item">
-        <span class="label">Started</span>
-        <span class="value">{{ startedAt() }}</span>
-      </div>
-      @if (recording().metadata.javaArguments) {
-        <div class="metadata-item wide">
-          <span class="label">Java arguments</span>
-          <span class="value code">{{ recording().metadata.javaArguments }}</span>
-        </div>
-      }
-      @if (recording().metadata.jvmArguments) {
-        <div class="metadata-item wide">
-          <span class="label">JVM arguments</span>
-          <span class="value code">{{ recording().metadata.jvmArguments }}</span>
-        </div>
-      }
-    </div>
+    </dl>
 
-    <h3>CPU usage</h3>
-    @if (recording().cpuLoad.length > 0) {
-      <div echarts [options]="cpuChartOptions()" class="chart"></div>
-    } @else {
-      <p class="empty">No jdk.CPULoad events were recorded.</p>
-    }
+    <section class="panel-section">
+      <h3>CPU usage</h3>
+      @if (recording().cpuLoad.length > 0) {
+        <div echarts [options]="cpuChartOptions()" [theme]="theme.chartTheme()" class="chart surface"></div>
+      } @else {
+        <div class="empty-state"><strong>No CPU load samples</strong>The recording has no jdk.CPULoad events.</div>
+      }
+    </section>
 
-    <h3>Heap usage</h3>
-    @if (recording().heap.length > 0) {
-      <div echarts [options]="heapChartOptions()" class="chart"></div>
-    } @else {
-      <p class="empty">No heap usage events (jdk.GCHeapSummary or jdk.GCHeapMemoryUsage) were recorded.</p>
-    }
+    <section class="panel-section">
+      <h3>Heap</h3>
+      @if (recording().heap.length > 0) {
+        <div echarts [options]="heapChartOptions()" [theme]="theme.chartTheme()" class="chart surface"></div>
+      } @else {
+        <div class="empty-state"><strong>No heap samples</strong>The recording has no jdk.GCHeapSummary or jdk.GCHeapMemoryUsage events.</div>
+      }
+    </section>
+
+    <section class="panel-section">
+      <h3>JVM</h3>
+      <dl class="facts surface">
+        <div>
+          <dt>Name</dt>
+          <dd>{{ recording().metadata.jvmName || 'Unknown' }}</dd>
+        </div>
+        <div>
+          <dt>Version</dt>
+          <dd>{{ recording().metadata.jvmVersion || 'Unknown' }}</dd>
+        </div>
+        <div>
+          <dt>Operating system</dt>
+          <dd>{{ recording().metadata.osVersion || 'Unknown' }}</dd>
+        </div>
+        <div>
+          <dt>Process ID</dt>
+          <dd class="num">{{ recording().metadata.pid || 'Unknown' }}</dd>
+        </div>
+        <div>
+          <dt>Recording started</dt>
+          <dd>{{ startedAt() }}</dd>
+        </div>
+        @if (recording().metadata.javaArguments) {
+          <div class="wide">
+            <dt>Application arguments</dt>
+            <dd class="code">{{ recording().metadata.javaArguments }}</dd>
+          </div>
+        }
+        @if (recording().metadata.jvmArguments) {
+          <div class="wide">
+            <dt>JVM flags</dt>
+            <dd class="code">{{ recording().metadata.jvmArguments }}</dd>
+          </div>
+        }
+      </dl>
+    </section>
   `,
   styles: [
     `
-      .metadata-grid {
+      .facts {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-        gap: 16px;
-        margin-bottom: 24px;
+        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+        margin: 0;
       }
-      .metadata-item {
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
+      .facts > div {
+        padding: 12px 18px;
+        border-top: 1px solid var(--rule);
+        margin-top: -1px;
         min-width: 0;
       }
-      .metadata-item.wide {
+      .facts .wide {
         grid-column: 1 / -1;
       }
-      .label {
-        font-size: 12px;
-        color: var(--mat-sys-on-surface-variant);
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
+      dt {
+        font-size: 13px;
+        color: var(--muted);
       }
-      .value {
-        font-size: 14px;
-        overflow-wrap: break-word;
-      }
-      .value.code {
-        font-family: 'Roboto Mono', monospace;
-        font-size: 12px;
-      }
-      h3 {
-        margin: 24px 0 8px;
-      }
-      .chart {
-        width: 100%;
-        height: 260px;
-      }
-      .empty {
-        color: var(--mat-sys-on-surface-variant);
+      dd {
+        margin: 2px 0 0;
+        overflow-wrap: anywhere;
       }
     `,
   ],
 })
 export class OverviewPanelComponent {
   recording = input.required<ParsedRecording>();
-
-  protected formatDuration = formatDuration;
+  protected readonly theme = inject(ThemeService);
 
   protected startedAt = computed(() => {
     const ms = this.recording().metadata.startTimeMs;
     return ms ? new Date(ms).toLocaleString() : 'Unknown';
   });
 
+  protected summary = computed(() => {
+    const r = this.recording();
+    const jvm = r.cpuLoad.map((d) => d.jvmUser + d.jvmSystem);
+    const peakHeap = r.heap.reduce((max, h) => Math.max(max, h.heapUsedBytes), 0);
+    const gcMs = r.gcPauses.reduce((sum, p) => sum + p.durationMs, 0);
+    return {
+      avgCpu: jvm.length ? percent(jvm.reduce((a, b) => a + b, 0) / jvm.length) : 'n/a',
+      peakCpu: jvm.length ? percent(Math.max(...jvm)) : 'n/a',
+      peakHeap: r.heap.length ? formatBytes(peakHeap) : 'n/a',
+      gcPause: r.gcPauses.length ? formatDurationMsPrecise(gcMs) : 'n/a',
+    };
+  });
+
   protected cpuChartOptions = computed<EChartsCoreOption>(() => {
     const data = this.recording().cpuLoad;
     return {
-      tooltip: { trigger: 'axis', valueFormatter: (v: unknown) => `${((v as number) * 100).toFixed(1)}%` },
-      legend: { data: ['JVM user', 'JVM system', 'Machine total'] },
-      grid: { left: 50, right: 20, top: 40, bottom: 60 },
+      tooltip: { trigger: 'axis', valueFormatter: (v: unknown) => percent(v as number) },
+      legend: { top: 4, data: ['JVM user', 'JVM system', 'Whole machine'] },
+      grid: { left: 56, right: 24, top: 40, bottom: 56 },
       xAxis: { type: 'time', axisLabel: { formatter: (v: number) => formatTimeAxisLabel(v) } },
       yAxis: { type: 'value', min: 0, max: 1, axisLabel: { formatter: (v: number) => `${Math.round(v * 100)}%` } },
-      dataZoom: [{ type: 'inside' }, { type: 'slider', height: 16, bottom: 8 }],
+      dataZoom: TIME_AXIS_ZOOM,
       series: [
-        { name: 'JVM user', type: 'line', showSymbol: false, data: data.map((d) => [d.timeMs, d.jvmUser]) },
-        { name: 'JVM system', type: 'line', showSymbol: false, data: data.map((d) => [d.timeMs, d.jvmSystem]) },
-        { name: 'Machine total', type: 'line', showSymbol: false, data: data.map((d) => [d.timeMs, d.machineTotal]) },
+        { name: 'JVM user', type: 'line', stack: 'jvm', areaStyle: { opacity: 0.25 }, data: data.map((d) => [d.timeMs, d.jvmUser]) },
+        { name: 'JVM system', type: 'line', stack: 'jvm', areaStyle: { opacity: 0.25 }, data: data.map((d) => [d.timeMs, d.jvmSystem]) },
+        { name: 'Whole machine', type: 'line', lineStyle: { type: 'dashed' }, data: data.map((d) => [d.timeMs, d.machineTotal]) },
       ],
     };
   });
@@ -137,18 +160,14 @@ export class OverviewPanelComponent {
     const data = this.recording().heap;
     return {
       tooltip: { trigger: 'axis', valueFormatter: (v: unknown) => formatBytes(v as number) },
-      grid: { left: 70, right: 20, top: 20, bottom: 60 },
+      legend: { top: 4, data: ['Used', 'Committed'] },
+      grid: { left: 72, right: 24, top: 40, bottom: 56 },
       xAxis: { type: 'time', axisLabel: { formatter: (v: number) => formatTimeAxisLabel(v) } },
       yAxis: { type: 'value', min: 0, axisLabel: { formatter: (v: number) => formatBytes(v) } },
-      dataZoom: [{ type: 'inside' }, { type: 'slider', height: 16, bottom: 8 }],
+      dataZoom: TIME_AXIS_ZOOM,
       series: [
-        {
-          name: 'Heap used',
-          type: 'line',
-          showSymbol: false,
-          areaStyle: {},
-          data: data.map((d) => [d.timeMs, d.heapUsedBytes]),
-        },
+        { name: 'Used', type: 'line', areaStyle: { opacity: 0.2 }, data: data.map((d) => [d.timeMs, d.heapUsedBytes]) },
+        { name: 'Committed', type: 'line', step: 'end', lineStyle: { type: 'dashed' }, data: data.map((d) => [d.timeMs, d.heapCommittedBytes]) },
       ],
     };
   });

@@ -35,3 +35,9 @@ export function formatTimeAxisLabel(ms: number): string {
   const d = new Date(ms);
   return d.toLocaleTimeString(undefined, { hour12: false }) + '.' + String(d.getMilliseconds()).padStart(3, '0');
 }
+
+const compactFormat = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
+
+export function formatCompact(n: number): string {
+  return compactFormat.format(n);
+}

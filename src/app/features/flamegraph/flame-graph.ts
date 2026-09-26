@@ -1,8 +1,6 @@
 import { AfterViewInit, Component, ElementRef, HostListener, OnDestroy, ViewChild, effect, input } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
-import { MatInputModule } from '@angular/material/input';
 import { FormsModule } from '@angular/forms';
 import * as d3 from 'd3';
 import flamegraph, { type FlameGraphChart, type FlameGraphHierarchyNode } from 'd3-flame-graph';
@@ -19,20 +17,20 @@ function formatValue(value: number, unit: 'samples' | 'bytes'): string {
 @Component({
   selector: 'app-flame-graph',
   standalone: true,
-  imports: [MatButtonModule, MatIconModule, MatFormFieldModule, MatInputModule, FormsModule],
+  imports: [MatButtonModule, MatIconModule, FormsModule],
   template: `
     <div class="flame-toolbar">
-      <mat-form-field appearance="outline" subscriptSizing="dynamic" class="search-field">
-        <mat-label>Search frames</mat-label>
-        <input matInput [(ngModel)]="searchTerm" (ngModelChange)="onSearch($event)" placeholder="e.g. Sample.fib" />
-      </mat-form-field>
+      <label class="search">
+        <mat-icon aria-hidden="true">search</mat-icon>
+        <input type="search" [(ngModel)]="searchTerm" (ngModelChange)="onSearch($event)" placeholder="Highlight frames, e.g. HashMap.get" aria-label="Highlight matching frames" />
+      </label>
       <button mat-stroked-button (click)="onResetZoom()">
         <mat-icon>zoom_out_map</mat-icon>
         Reset zoom
       </button>
-      <span class="total">Total: {{ formatTotal() }}</span>
+      <span class="total num">{{ formatTotal() }} in total</span>
     </div>
-    <div class="flame-container" #container></div>
+    <div class="flame-container surface" #container></div>
   `,
   styles: [
     `
@@ -43,14 +41,41 @@ function formatValue(value: number, unit: 'samples' | 'bytes'): string {
         display: flex;
         align-items: center;
         gap: 12px;
-        margin-bottom: 8px;
+        margin-bottom: 12px;
         flex-wrap: wrap;
       }
-      .search-field {
-        width: 260px;
+      .search {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: min(340px, 100%);
+        height: 36px;
+        padding: 0 12px;
+        box-sizing: border-box;
+        background: var(--panel);
+        border: 1px solid var(--rule);
+        border-radius: var(--radius-s);
+        color: var(--muted);
+      }
+      .search:focus-within {
+        border-color: var(--signal);
+      }
+      .search mat-icon {
+        font-size: 18px;
+        width: 18px;
+        height: 18px;
+      }
+      .search input {
+        flex: 1;
+        min-width: 0;
+        border: 0;
+        background: none;
+        color: var(--ink);
+        font: inherit;
+        outline: none;
       }
       .total {
-        color: var(--mat-sys-on-surface-variant);
+        color: var(--muted);
         font-size: 13px;
         margin-left: auto;
       }
@@ -58,6 +83,8 @@ function formatValue(value: number, unit: 'samples' | 'bytes'): string {
         width: 100%;
         min-height: 400px;
         overflow-x: hidden;
+        padding: 8px 0;
+        box-sizing: border-box;
       }
     `,
   ],

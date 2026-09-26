@@ -13,24 +13,24 @@ import { formatBytes, formatDuration, relativeTime } from '../../shared/formatte
   imports: [MatButtonModule, MatIconModule, MatTooltipModule],
   template: `
     @if (summaries().length === 0) {
-      <p class="empty">No previous recordings yet&mdash;drop a .jfr file above to get started.</p>
+      <p class="empty">Recordings you open are kept here, in this browser, so you can come back to them later.</p>
     } @else {
       <ul class="history-list">
         @for (item of summaries(); track item.id) {
-          <li class="history-row" (click)="open(item.id)">
-            <mat-icon class="row-icon">insert_drive_file</mat-icon>
-            <div class="row-main">
-              <div class="row-title">{{ item.fileName }}</div>
-              <div class="row-subtitle">
-                {{ formatDuration(item.durationMs) }} &middot; {{ formatBytes(item.fileSizeBytes) }}
+          <li class="history-row">
+            <button type="button" class="row-open" (click)="open(item.id)">
+              <span class="row-title">{{ item.fileName }}</span>
+              <span class="row-meta">
+                <span class="num">{{ formatDuration(item.durationMs) }}</span>
+                <span class="num">{{ formatBytes(item.fileSizeBytes) }}</span>
                 @if (item.jvmVersion) {
-                  &middot; {{ item.jvmVersion }}
+                  <span class="jvm">{{ item.jvmVersion }}</span>
                 }
-              </div>
-            </div>
-            <div class="row-time" [matTooltip]="absoluteTime(item.uploadedAtMs)">{{ relativeTime(item.uploadedAtMs) }}</div>
-            <button mat-icon-button matTooltip="Remove from history" (click)="remove($event, item.id)">
-              <mat-icon>delete_outline</mat-icon>
+              </span>
+              <span class="row-time" [matTooltip]="absoluteTime(item.uploadedAtMs)">{{ relativeTime(item.uploadedAtMs) }}</span>
+            </button>
+            <button mat-icon-button class="row-delete" matTooltip="Remove from this list" [attr.aria-label]="'Remove ' + item.fileName" (click)="remove(item.id)">
+              <mat-icon>delete</mat-icon>
             </button>
           </li>
         }
@@ -40,35 +40,49 @@ import { formatBytes, formatDuration, relativeTime } from '../../shared/formatte
   styles: [
     `
       .empty {
-        color: var(--mat-sys-on-surface-variant);
-        text-align: center;
-        padding: 24px 0;
+        color: var(--muted);
+        margin: 0;
+        padding: 20px;
+        border: 1px dashed var(--rule);
+        border-radius: var(--radius-m);
       }
       .history-list {
         list-style: none;
         margin: 0;
         padding: 0;
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
+        background: var(--panel);
+        border: 1px solid var(--rule);
+        border-radius: var(--radius-m);
+        overflow: hidden;
       }
       .history-row {
         display: flex;
         align-items: center;
-        gap: 12px;
-        padding: 10px 12px;
-        border-radius: 8px;
-        cursor: pointer;
+        padding-right: 4px;
+      }
+      .history-row + .history-row {
+        border-top: 1px solid var(--rule);
       }
       .history-row:hover {
-        background-color: var(--mat-sys-surface-container-high);
+        background: var(--hover);
       }
-      .row-icon {
-        color: var(--mat-sys-on-surface-variant);
-      }
-      .row-main {
+      .row-open {
         flex: 1;
         min-width: 0;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        column-gap: 12px;
+        row-gap: 2px;
+        padding: 12px 8px 12px 16px;
+        border: 0;
+        background: none;
+        color: inherit;
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+      }
+      .row-open:focus-visible {
+        outline-offset: -2px;
       }
       .row-title {
         font-weight: 500;
@@ -76,17 +90,41 @@ import { formatBytes, formatDuration, relativeTime } from '../../shared/formatte
         overflow: hidden;
         text-overflow: ellipsis;
       }
-      .row-subtitle {
-        font-size: 12px;
-        color: var(--mat-sys-on-surface-variant);
+      .row-open:hover .row-title {
+        color: var(--signal-ink);
+      }
+      .row-meta {
+        grid-column: 1;
+        display: flex;
+        gap: 14px;
+        font-size: 13px;
+        color: var(--muted);
         white-space: nowrap;
+        overflow: hidden;
+      }
+      .jvm {
         overflow: hidden;
         text-overflow: ellipsis;
       }
       .row-time {
-        font-size: 12px;
-        color: var(--mat-sys-on-surface-variant);
+        grid-column: 2;
+        grid-row: 1;
+        font-size: 13px;
+        color: var(--muted);
         white-space: nowrap;
+      }
+      .row-delete {
+        color: var(--muted);
+        opacity: 0;
+      }
+      .history-row:hover .row-delete,
+      .row-delete:focus-visible {
+        opacity: 1;
+      }
+      @media (hover: none) {
+        .row-delete {
+          opacity: 1;
+        }
       }
     `,
   ],
@@ -112,8 +150,7 @@ export class HistoryListComponent {
     void this.stateService.loadFromHistory(id);
   }
 
-  protected remove(event: Event, id: string): void {
-    event.stopPropagation();
+  protected remove(id: string): void {
     void this.stateService.deleteFromHistory(id);
   }
 

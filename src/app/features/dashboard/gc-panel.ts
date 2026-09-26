@@ -1,9 +1,11 @@
-import { Component, computed, input } from '@angular/core';
+import { Component, computed, inject, input } from '@angular/core';
 import { MatTableModule } from '@angular/material/table';
 import type { EChartsCoreOption } from 'echarts/core';
 import { NgxEchartsDirective } from 'ngx-echarts';
 import type { GcPauseEvent, ParsedRecording } from '../../core/jfr/models';
 import { formatDurationMsPrecise, formatTimeAxisLabel } from '../../shared/formatters';
+import { ThemeService } from '../../shared/theme.service';
+import { TIME_AXIS_ZOOM } from './chart-defaults';
 
 @Component({
   selector: 'app-gc-panel',
@@ -11,93 +13,75 @@ import { formatDurationMsPrecise, formatTimeAxisLabel } from '../../shared/forma
   imports: [NgxEchartsDirective, MatTableModule],
   template: `
     @if (recording().gcPauses.length === 0) {
-      <p class="empty">No garbage collection events were recorded.</p>
+      <div class="empty-state"><strong>No garbage collection pauses</strong>The recording has no GC pause events.</div>
     } @else {
-      <div class="stats-row">
-        <div class="stat">
-          <span class="stat-value">{{ stats().count }}</span>
-          <span class="stat-label">GC pauses</span>
+      <dl class="readout">
+        <div>
+          <dt>Pauses</dt>
+          <dd>{{ stats().count.toLocaleString() }}</dd>
         </div>
-        <div class="stat">
-          <span class="stat-value">{{ formatDurationMsPrecise(stats().totalMs) }}</span>
-          <span class="stat-label">Total pause time</span>
+        <div>
+          <dt>Total time paused</dt>
+          <dd>{{ formatDurationMsPrecise(stats().totalMs) }}</dd>
         </div>
-        <div class="stat">
-          <span class="stat-value">{{ formatDurationMsPrecise(stats().maxMs) }}</span>
-          <span class="stat-label">Longest pause</span>
+        <div>
+          <dt>Share of recording</dt>
+          <dd>{{ stats().share }}</dd>
         </div>
-        <div class="stat">
-          <span class="stat-value">{{ formatDurationMsPrecise(stats().avgMs) }}</span>
-          <span class="stat-label">Average pause</span>
+        <div>
+          <dt>Longest pause</dt>
+          <dd>{{ formatDurationMsPrecise(stats().maxMs) }}</dd>
         </div>
-      </div>
+        <div>
+          <dt>Average pause</dt>
+          <dd>{{ formatDurationMsPrecise(stats().avgMs) }}</dd>
+        </div>
+      </dl>
 
-      <div echarts [options]="chartOptions()" class="chart"></div>
+      <section class="panel-section">
+        <h3>Pauses over time <span class="hint">Each dot is one pause. Higher means your app stood still longer.</span></h3>
+        <div echarts [options]="chartOptions()" [theme]="theme.chartTheme()" class="chart surface"></div>
+      </section>
 
-      <h3>Longest pauses</h3>
-      <table mat-table [dataSource]="longestPauses()" class="mat-elevation-z0">
-        <ng-container matColumnDef="time">
-          <th mat-header-cell *matHeaderCellDef>Time</th>
-          <td mat-cell *matCellDef="let row">{{ formatTime(row.timeMs) }}</td>
-        </ng-container>
-        <ng-container matColumnDef="name">
-          <th mat-header-cell *matHeaderCellDef>Collector</th>
-          <td mat-cell *matCellDef="let row">{{ row.name }}</td>
-        </ng-container>
-        <ng-container matColumnDef="cause">
-          <th mat-header-cell *matHeaderCellDef>Cause</th>
-          <td mat-cell *matCellDef="let row">{{ row.cause }}</td>
-        </ng-container>
-        <ng-container matColumnDef="duration">
-          <th mat-header-cell *matHeaderCellDef>Duration</th>
-          <td mat-cell *matCellDef="let row">{{ formatDurationMsPrecise(row.durationMs) }}</td>
-        </ng-container>
-        <tr mat-header-row *matHeaderRowDef="columns"></tr>
-        <tr mat-row *matRowDef="let row; columns: columns"></tr>
-      </table>
+      <section class="panel-section">
+        <h3>Longest pauses <span class="hint">Top {{ longestPauses().length }}</span></h3>
+        <div class="surface data-table-wrap">
+          <table mat-table [dataSource]="longestPauses()">
+            <ng-container matColumnDef="duration">
+              <th mat-header-cell *matHeaderCellDef class="right">Duration</th>
+              <td mat-cell *matCellDef="let row" class="right strong">{{ formatDurationMsPrecise(row.durationMs) }}</td>
+            </ng-container>
+            <ng-container matColumnDef="cause">
+              <th mat-header-cell *matHeaderCellDef>Cause</th>
+              <td mat-cell *matCellDef="let row">{{ row.cause }}</td>
+            </ng-container>
+            <ng-container matColumnDef="name">
+              <th mat-header-cell *matHeaderCellDef>Collector</th>
+              <td mat-cell *matCellDef="let row">{{ row.name }}</td>
+            </ng-container>
+            <ng-container matColumnDef="time">
+              <th mat-header-cell *matHeaderCellDef class="right">At</th>
+              <td mat-cell *matCellDef="let row" class="right">{{ formatTime(row.timeMs) }}</td>
+            </ng-container>
+            <tr mat-header-row *matHeaderRowDef="columns"></tr>
+            <tr mat-row *matRowDef="let row; columns: columns"></tr>
+          </table>
+        </div>
+      </section>
     }
   `,
   styles: [
     `
-      .empty {
-        color: var(--mat-sys-on-surface-variant);
-        text-align: center;
-        padding: 24px 0;
-      }
-      .stats-row {
-        display: flex;
-        gap: 32px;
-        margin-bottom: 16px;
-        flex-wrap: wrap;
-      }
-      .stat {
-        display: flex;
-        flex-direction: column;
-      }
-      .stat-value {
-        font-size: 22px;
-        font-weight: 500;
-      }
-      .stat-label {
-        font-size: 12px;
-        color: var(--mat-sys-on-surface-variant);
-      }
-      .chart {
-        width: 100%;
-        height: 260px;
-      }
-      h3 {
-        margin: 24px 0 8px;
-      }
-      table {
-        width: 100%;
+      .strong {
+        font-weight: 600;
       }
     `,
   ],
 })
 export class GcPanelComponent {
   recording = input.required<ParsedRecording>();
-  protected readonly columns = ['time', 'name', 'cause', 'duration'];
+  protected readonly columns = ['duration', 'cause', 'name', 'time'];
+  protected readonly theme = inject(ThemeService);
 
   protected formatDurationMsPrecise = formatDurationMsPrecise;
 
@@ -105,7 +89,9 @@ export class GcPanelComponent {
     const pauses = this.recording().gcPauses;
     const totalMs = pauses.reduce((sum, p) => sum + p.durationMs, 0);
     const maxMs = pauses.reduce((max, p) => Math.max(max, p.durationMs), 0);
-    return { count: pauses.length, totalMs, maxMs, avgMs: pauses.length ? totalMs / pauses.length : 0 };
+    const durationMs = this.recording().metadata.durationMs;
+    const share = durationMs > 0 ? `${((totalMs / durationMs) * 100).toFixed(2)}%` : 'n/a';
+    return { count: pauses.length, totalMs, maxMs, share, avgMs: pauses.length ? totalMs / pauses.length : 0 };
   });
 
   protected longestPauses = computed<GcPauseEvent[]>(() => [...this.recording().gcPauses].sort((a, b) => b.durationMs - a.durationMs).slice(0, 20));
@@ -125,15 +111,16 @@ export class GcPanelComponent {
           return `${point.seriesName}<br/>${formatTimeAxisLabel(point.value[0])}: ${formatDurationMsPrecise(point.value[1])}`;
         },
       },
-      legend: { data: Array.from(byName.keys()) },
-      grid: { left: 60, right: 20, top: 40, bottom: 60 },
+      legend: { top: 4, data: Array.from(byName.keys()) },
+      grid: { left: 64, right: 24, top: 40, bottom: 56 },
       xAxis: { type: 'time', axisLabel: { formatter: (v: number) => formatTimeAxisLabel(v) } },
-      yAxis: { type: 'value', name: 'Pause (ms)', min: 0 },
-      dataZoom: [{ type: 'inside' }, { type: 'slider', height: 16, bottom: 8 }],
+      yAxis: { type: 'value', min: 0, axisLabel: { formatter: (v: number) => `${v} ms` } },
+      dataZoom: TIME_AXIS_ZOOM,
       series: Array.from(byName.entries()).map(([name, pauses]) => ({
         name,
         type: 'scatter',
-        symbolSize: 8,
+        symbolSize: 7,
+        itemStyle: { opacity: 0.8 },
         data: pauses.map((p) => [p.timeMs, p.durationMs]),
       })),
     };
