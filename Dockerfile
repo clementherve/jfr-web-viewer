@@ -14,7 +14,7 @@ RUN pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm run build
 
-FROM nginx:1.27-alpine AS runtime
+FROM nginx:1.30.5-alpine-slim AS runtime
 
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist/jfr-viewer/browser /usr/share/nginx/html
